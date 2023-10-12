@@ -1,0 +1,65 @@
+#include <vector>
+#include <algorithm>
+#include <iterator>
+#include <numeric>
+#include <memory>
+
+template<typename Iter1, typename Iter2>
+void apply_permutation(
+    Iter1 first,
+    Iter1 last,
+    Iter2 indices)
+{
+    using T = typename std::iterator_traits<Iter1>::value_type;
+    using Diff = typename std::iterator_traits<Iter2>::value_type;
+
+    const Diff length = std::distance(first, last);
+    for (Diff i = 0; i < length; i++) {
+        Diff current = i;
+        while (i != indices[current]) {
+            const Diff next = indices[current];
+            if (next < 0 || next >= length) {
+                indices[i] = next;
+                throw std::range_error("Invalid index in permutation");
+            }
+            if (next == current) {
+                indices[i] = next;
+                throw std::range_error("Not a permutation");
+            }
+            using std::swap;
+            swap(first[current], first[next]);
+            indices[current] = current;
+            current = next;
+        }
+        indices[current] = current;
+    }
+}
+
+template<typename Iter, typename UnaryOperation, typename Compare>
+void sort_by_with_caching(
+    Iter first, 
+    Iter last, 
+    UnaryOperation op, 
+    Compare comp)
+{
+    using Diff = typename std::iterator_traits<Iter>::difference_type;
+    using T = typename std::iterator_traits<Iter>::value_type;
+    using Key = decltype(op(std::declval<T>()));
+
+    const Diff length = std::distance(first, last);
+    std::vector<Key> keys;
+    keys.reserve(length);
+    std::transform(first, last, std::back_inserter(keys),
+                [&](T& t) { return op(t); });
+
+#if __cplusplus >= 202002L
+    const auto indices = std::make_unique_for_overwrite<Diff[]>(length);
+#else
+    const auto indices = std::make_unique<Diff[]>(length);
+#endif
+
+    std::iota(indices.get(), indices.get() + length, Diff{});
+    std::sort(indices.get(), indices.get() + length,
+           [&](Diff a, Diff b) { return comp(keys[a], keys[b]); });
+     apply_permutation(first, last, indices.get());
+}
